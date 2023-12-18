@@ -1,0 +1,47 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+
+.program i2s_slave_rx
+
+.define LR_PIN 24
+.define BCK_PIN 25
+
+; Repeatedly get one word of data from the TX FIFO, stalling when the FIFO is
+; empty. Write the least significant bit to the OUT pin group.
+
+
+    wait 0 gpio LR_PIN
+.wrap_target
+    wait 1 gpio BCK_PIN
+    wait 0 gpio BCK_PIN
+    in pins, 1
+
+% c-sdk {
+
+static inline void i2s_slave_rx_init(PIO pio, uint sm, uint offset, uint clkpin, uint lrpin, uint datpin) {
+    pio_sm_config c = i2s_slave_rx_program_get_default_config(offset);
+
+    // Map the state machine's IN pin group to one pin, namely the `pin`
+    // parameter to this function.
+    sm_config_set_in_pins(&c, datpin);
+    // Setup input shifting
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+    sm_config_set_in_shift(&c, false, true, 32);
+    // Set this pin's GPIO function (connect PIO to the pad)
+    pio_gpio_init(pio, clkpin);
+    pio_gpio_init(pio, lrpin);
+    pio_gpio_init(pio, datpin);
+    // Set the pin direction to input at the PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, clkpin, 1, false);
+    pio_sm_set_consecutive_pindirs(pio, sm, lrpin, 1, false);
+    pio_sm_set_consecutive_pindirs(pio, sm, datpin, 1, false);
+
+    // Load our configuration, and jump to the start of the program
+    pio_sm_init(pio, sm, offset, &c);
+    // Set the state machine running
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
